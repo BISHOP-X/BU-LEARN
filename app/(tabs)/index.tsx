@@ -2,10 +2,12 @@ import { Colors, Spacing, Typography } from '@/constants/theme';
 import { calculateLevel, calculateProgress } from '@/lib/gamification';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@/types/database';
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -91,7 +93,11 @@ export default function HomeScreen() {
       </View>
 
       {/* Quick Upload Button */}
-      <TouchableOpacity style={styles.uploadButton} activeOpacity={0.8}>
+      <TouchableOpacity 
+        style={styles.uploadButton} 
+        activeOpacity={0.8}
+        onPress={() => router.push('/upload')}
+      >
         <View style={styles.uploadButtonContent}>
           <Text style={styles.uploadIcon}>📤</Text>
           <View>

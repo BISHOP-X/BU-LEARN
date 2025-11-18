@@ -1,6 +1,13 @@
+import BadgeUnlockModal from '@/components/BadgeUnlockModal';
+import LevelUpModal from '@/components/LevelUpModal';
+import Toast from '@/components/Toast';
+import XPToast from '@/components/XPToast';
 import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
+import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
+import { useXPSystem } from '@/hooks/useXPSystem';
 import { mockConversionResult } from '@/lib/mockData';
 import { supabase } from '@/lib/supabase';
+import { awardUploadXP } from '@/lib/xpSystem';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
@@ -13,6 +20,25 @@ export default function UploadScreen() {
   const [title, setTitle] = useState('');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
+  const { currentBadge, modalVisible, handleCloseModal, checkForNewBadges } = useBadgeNotifications(userId);
+  const { 
+    xpToastVisible, 
+    xpAmount, 
+    hideXPToast, 
+    levelUpModalVisible, 
+    levelUpData, 
+    closeLevelUpModal, 
+    handleXPAwarded 
+  } = useXPSystem();
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setToastVisible(true);
+  };
 
   const pickDocument = async () => {
     try {
@@ -55,6 +81,9 @@ export default function UploadScreen() {
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
+
+      // Store user ID for badge checking
+      if (!userId) setUserId(user.id);
 
       // Read file as blob
       const response = await fetch(file.uri);
@@ -104,24 +133,23 @@ export default function UploadScreen() {
 
       setProgress(100);
 
+      // Award XP for upload
+      const xpResult = await awardUploadXP(user.id);
+      if (xpResult.success) {
+        handleXPAwarded(xpResult);
+      }
+
+      // Check for newly earned badges
+      await checkForNewBadges();
+
       // Navigate to result screen with the content ID
       const contentId = contentData?.id || mockConversionResult.contentId;
       
-      Alert.alert('Success!', 'File uploaded successfully', [
-        {
-          text: 'View Result',
-          onPress: () => router.push(`/result/${contentId}` as any),
-        },
-        {
-          text: 'Upload Another',
-          style: 'cancel',
-          onPress: () => {
-            setFile(null);
-            setTitle('');
-            setProgress(0);
-          }
-        },
-      ]);
+      showToast('File uploaded successfully!');
+      
+      setTimeout(() => {
+        router.push(`/result/${contentId}` as any);
+      }, 1500);
     } catch (error: any) {
       console.error('Upload error:', error);
       Alert.alert('Upload Failed', error.message);
@@ -224,6 +252,35 @@ export default function UploadScreen() {
         </View>
       </View>
       </ScrollView>
+
+      {/* Badge Unlock Modal */}
+      <BadgeUnlockModal
+        visible={modalVisible}
+        badge={currentBadge}
+        onClose={handleCloseModal}
+      />
+
+      {/* Level Up Modal */}
+      <LevelUpModal
+        visible={levelUpModalVisible}
+        oldLevel={levelUpData.oldLevel}
+        newLevel={levelUpData.newLevel}
+        onClose={closeLevelUpModal}
+      />
+
+      {/* XP Toast */}
+      <XPToast
+        visible={xpToastVisible}
+        xpAmount={xpAmount}
+        onHide={hideXPToast}
+      />
+
+      {/* Toast Notification */}
+      <Toast
+        visible={toastVisible}
+        message={toastMessage}
+        onHide={() => setToastVisible(false)}
+      />
     </View>
   );
 }

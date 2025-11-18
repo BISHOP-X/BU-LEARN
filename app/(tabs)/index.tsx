@@ -1,6 +1,15 @@
+import BadgeUnlockModal from '@/components/BadgeUnlockModal';
+import LevelUpModal from '@/components/LevelUpModal';
+import StreakWarningToast from '@/components/StreakWarningToast';
+import XPToast from '@/components/XPToast';
 import { Colors, Spacing, Typography } from '@/constants/theme';
+import { useBadgeNotifications } from '@/hooks/useBadgeNotifications';
+import { useStreakWarning } from '@/hooks/useStreakWarning';
+import { useXPSystem } from '@/hooks/useXPSystem';
 import { calculateLevel, calculateProgress } from '@/lib/gamification';
+import { updateStreak } from '@/lib/streakSystem';
 import { supabase } from '@/lib/supabase';
+import { awardDailyLoginXP } from '@/lib/xpSystem';
 import type { User } from '@/types/database';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -11,9 +20,51 @@ export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const { currentBadge, modalVisible, handleCloseModal, checkForNewBadges } = useBadgeNotifications(user?.id || null);
+  const { 
+    xpToastVisible, 
+    xpAmount, 
+    hideXPToast, 
+    levelUpModalVisible, 
+    levelUpData, 
+    closeLevelUpModal, 
+    handleXPAwarded 
+  } = useXPSystem();
+  const { showWarning, currentStreak, hideWarning } = useStreakWarning(user?.id || null);
+
   useEffect(() => {
     fetchUserData();
   }, []);
+
+  useEffect(() => {
+    // Check for badges and daily login XP when user data is loaded
+    if (user?.id) {
+      checkDailyLogin();
+      checkForNewBadges();
+    }
+  }, [user?.id]);
+
+  const checkDailyLogin = async () => {
+    if (!user?.id) return;
+    
+    // Update streak (checks last_active, increments if yesterday, resets if 2+ days)
+    const streakResult = await updateStreak(user.id);
+    if (streakResult.success) {
+      // Update local user state with new streak
+      setUser(prev => prev ? { ...prev, streak: streakResult.streak } : null);
+      
+      // Check if streak was reset (user missed 2+ days)
+      if (streakResult.wasReset) {
+        console.log('Streak was reset to 1 after missing days');
+      }
+    }
+    
+    // Award daily login XP
+    const xpResult = await awardDailyLoginXP(user.id);
+    if (xpResult.success) {
+      handleXPAwarded(xpResult);
+    }
+  };
 
   const fetchUserData = async () => {
     try {
@@ -56,6 +107,7 @@ export default function HomeScreen() {
   const progress = calculateProgress(user.points);
 
   return (
+    <>
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
@@ -118,6 +170,37 @@ export default function HomeScreen() {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+
+    {/* Badge Unlock Modal */}
+    <BadgeUnlockModal
+      visible={modalVisible}
+      badge={currentBadge}
+      onClose={handleCloseModal}
+    />
+
+    {/* Level Up Modal */}
+    <LevelUpModal
+      visible={levelUpModalVisible}
+      oldLevel={levelUpData.oldLevel}
+      newLevel={levelUpData.newLevel}
+      onClose={closeLevelUpModal}
+    />
+
+    {/* XP Toast */}
+    <XPToast
+      visible={xpToastVisible}
+      xpAmount={xpAmount}
+      onHide={hideXPToast}
+    />
+
+    {/* Streak Warning Toast */}
+    <StreakWarningToast
+      visible={showWarning}
+      streak={currentStreak}
+      onHide={hideWarning}
+      onActionPress={() => router.push('/upload' as any)}
+    />
+    </>
   );
 }
 

@@ -27,6 +27,7 @@ Mobile App (Expo/React Native)
     ├── Navigation: Expo Router (file-based routing)
     ├── State: React Hooks + AsyncStorage (local caching)
     ├── UI: Custom components + react-native-reanimated (animations)
+    ├── Haptics: expo-haptics (tactile feedback)
     └── Auth: Supabase Auth SDK
 
 Backend (Supabase)
@@ -38,6 +39,12 @@ Backend (Supabase)
 AI Layer
     ├── Google Gemini API: Content generation
     └── Google Cloud TTS: Text-to-speech audio
+
+Gamification Layer
+    ├── XP System: Points calculation, level progression
+    ├── Badge System: Achievement tracking, unlock logic
+    ├── Streak System: Daily engagement tracking with calendar
+    └── Leaderboard: Real-time rankings with podium display
 ```
 
 ---
@@ -110,11 +117,12 @@ app/
 │   ├── login.tsx                # Email/password login
 │   └── signup.tsx               # Account creation + learning style quiz
 ├── (tabs)/                      # Main app (bottom tabs)
-│   ├── index.tsx                # Home dashboard (progress, recommendations)
+│   ├── index.tsx                # Home dashboard (progress, recommendations, XP/streak)
 │   ├── library.tsx              # Uploaded content list (with filters/search)
-│   ├── leaderboard.tsx          # Top users by points
-│   └── profile.tsx              # User profile + badges
+│   ├── leaderboard.tsx          # Top users by points with podium display
+│   └── profile.tsx              # User profile + badges + animated XP bar
 ├── upload.tsx                   # File picker → Supabase Storage
+├── badges.tsx                   # Badge collection screen (filters, details)
 └── result/[id].tsx              # Content viewer (4 tabs: Notes/Quiz/Story/Audio)
 
 components/
@@ -123,12 +131,26 @@ components/
 │   ├── QuizTab.tsx              # MCQ quiz with scoring
 │   ├── StoryTab.tsx             # Chapter-based narrative reader
 │   └── AudioTab.tsx             # Audio player with speed control
+├── BadgeUnlockModal.tsx         # Animated badge unlock notification
+├── LevelUpModal.tsx             # Level progression celebration
+├── XPToast.tsx                  # XP gain notification toast
+├── StreakWarningToast.tsx       # Streak risk alert
+├── StreakCalendar.tsx           # Visual streak history (30 days)
 ├── SkeletonLoader.tsx           # Loading placeholders
-└── Toast.tsx                    # Notification toasts
+└── Toast.tsx                    # General notification toasts
 
 lib/
 ├── supabase.ts                  # Supabase client initialization
-└── mockData.ts                  # Sample data for development
+├── mockData.ts                  # Sample data for development
+├── xpSystem.ts                  # XP calculation, level progression logic
+├── badgeSystem.ts               # Badge requirements, unlock logic
+├── streakSystem.ts              # Streak tracking, calendar generation
+└── gamification.ts              # Unified gamification utilities
+
+hooks/
+├── useXPSystem.ts               # XP/level state management
+├── useBadgeNotifications.ts     # Badge unlock tracking
+└── useStreakWarning.ts          # Streak risk monitoring
 ```
 
 ---
@@ -186,15 +208,32 @@ Display 4 tabs:
 ```
 User completes action (upload, quiz, streak)
     ↓
-Backend checks badge requirements
+Frontend calls lib/xpSystem.ts → awardXP(userId, amount, reason)
     ↓
-If requirement met:
+XP added to users.points in database
+    ↓
+Check if level up triggered (every 500 XP = +1 level)
+    ↓
+If level up:
+    1. Update users.level
+    2. Show LevelUpModal with confetti animation
+    3. Trigger haptic feedback (Success notification)
+    ↓
+Check badge requirements via lib/badgeSystem.ts
+    ↓
+If badge earned:
     1. Insert into user_badges
-    2. Trigger fires → Add badge.points_reward to users.points
-    3. Recalculate user.level (every 500 points = +1 level)
-    4. Show toast notification "Badge Earned: Quiz Master 🏆 (+300 XP)"
+    2. Award badge.points_reward
+    3. Show BadgeUnlockModal with badge details
+    4. Trigger haptic feedback (Medium impact)
+    5. Display XPToast with points gained
     ↓
 Update leaderboard rankings (ORDER BY points DESC)
+    ↓
+Streak system checks daily engagement:
+    - If 23+ hours since last_active → Show StreakWarningToast
+    - If >24 hours → Reset streak to 0
+    - If active today → Increment streak, show StreakCalendar
 ```
 
 ---
@@ -294,6 +333,19 @@ users: SELECT allowed for all
 const [content, setContent] = useState<ContentItem[]>([]);
 const [loading, setLoading] = useState(false);
 const [searchQuery, setSearchQuery] = useState('');
+
+// Gamification hooks
+const { 
+  xpToastVisible, 
+  xpGained, 
+  hideXPToast,
+  levelUpModalVisible,
+  newLevel,
+  closeLevelUpModal
+} = useXPSystem(userId);
+
+const { showWarning, currentStreak, hideWarning } = useStreakWarning(userId);
+const { badges, checkAndUnlockBadges } = useBadgeNotifications(userId);
 ```
 
 ### Persistent State (AsyncStorage)
@@ -371,6 +423,10 @@ Currently using Supabase Edge Functions (serverless). Consider Node.js server if
 3. **Quiz Completion Rate**: % of started quizzes finished
 4. **User Retention**: Day 1, Day 7, Day 30 active users
 5. **Badge Unlock Rate**: Which badges are earned most
+6. **Streak Engagement**: % of users maintaining 7+ day streaks
+7. **XP Distribution**: Average XP per user, daily active users
+8. **Leaderboard Activity**: Top 10% user XP growth rate
+9. **Haptic Feedback Usage**: Interaction rate with gamified elements
 
 ### Error Logging
 
@@ -423,21 +479,32 @@ EXPO_PUBLIC_GEMINI_API_KEY=AIzaSyxxx...
 
 ## Summary
 
-BU-Learn uses a clean 3-tier architecture:
+BU-Learn uses a clean 3-tier architecture with integrated gamification:
 
 1. **Presentation Layer** (Expo/React Native)
-   - 13 screens with bottom tab + stack navigation
-   - Custom animated components
+   - 14+ screens with bottom tab + stack navigation
+   - Custom animated components (react-native-reanimated)
+   - Haptic feedback integration (expo-haptics)
    - Local state caching for instant UX
+   - Real-time gamification UI (modals, toasts, progress bars)
 
-2. **Business Logic Layer** (Supabase Edge Functions)
+2. **Business Logic Layer** (Supabase Edge Functions + Client-side Logic)
    - File processing + AI generation
-   - Badge achievement checks
-   - Streak calculation
+   - Badge achievement checks (client-side via badgeSystem.ts)
+   - Streak calculation (client-side via streakSystem.ts)
+   - XP/level progression (client-side via xpSystem.ts)
 
 3. **Data Layer** (PostgreSQL + Storage)
    - 7 tables with RLS security
    - Indexed foreign keys
-   - Auto-triggers for gamification
+   - Auto-triggers for gamification (badge points award)
 
-**Why this works:** Fast development, low infrastructure costs, scales to 10K+ users without major changes. When you hit 100K+ users, consider adding dedicated backend servers and job queues.
+**Why this works:** Fast development, low infrastructure costs, scales to 10K+ users without major changes. Gamification logic runs client-side for instant feedback, with database sync for persistence. When you hit 100K+ users, consider adding dedicated backend servers and job queues.
+
+**New in Current Build:**
+- ✅ Complete gamification system (XP, levels, badges, streaks)
+- ✅ Leaderboard with animated podium display
+- ✅ Haptic feedback for enhanced UX
+- ✅ Real-time notifications (badge unlocks, level ups, streak warnings)
+- ✅ Custom hooks for gamification state management
+- ⏳ AI integration (Phase 8 - pending implementation)

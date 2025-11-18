@@ -5,7 +5,9 @@ export const Colors = {
   accent: '#A7FF00',       // Lime
   background: '#F5F7FA',   // Off-white
   text: '#212121',         // Charcoal
+  textSecondary: '#666666', // Gray text
   white: '#FFFFFF',
+  border: '#E0E0E0',       // Light gray border
   error: '#FF3B30',
   success: '#34C759',
   warning: '#FF9500',

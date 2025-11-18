@@ -1,4 +1,5 @@
 import { BorderRadius, Colors, Spacing, Typography } from '@/constants/theme';
+import { mockConversionResult } from '@/lib/mockData';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
@@ -86,7 +87,7 @@ export default function UploadScreen() {
       setProgress(80);
 
       // Save metadata to database
-      const { error: dbError } = await supabase
+      const { data: contentData, error: dbError } = await supabase
         .from('content')
         .insert({
           user_id: user.id,
@@ -95,16 +96,30 @@ export default function UploadScreen() {
           file_type: fileExt,
           file_size: file.size,
           status: 'uploaded',
-        });
+        })
+        .select()
+        .single();
 
       if (dbError) throw dbError;
 
       setProgress(100);
 
+      // Navigate to result screen with the content ID
+      const contentId = contentData?.id || mockConversionResult.contentId;
+      
       Alert.alert('Success!', 'File uploaded successfully', [
         {
-          text: 'OK',
-          onPress: () => router.back(),
+          text: 'View Result',
+          onPress: () => router.push(`/result/${contentId}` as any),
+        },
+        {
+          text: 'Upload Another',
+          style: 'cancel',
+          onPress: () => {
+            setFile(null);
+            setTitle('');
+            setProgress(0);
+          }
         },
       ]);
     } catch (error: any) {

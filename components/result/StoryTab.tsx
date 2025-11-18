@@ -1,14 +1,15 @@
+import Toast from '@/components/Toast';
 import { Colors } from '@/constants/theme';
 import { StoryChapter } from '@/lib/mockData';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useState } from 'react';
 import {
-    Alert,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 
 interface StoryTabProps {
@@ -19,42 +20,85 @@ interface StoryTabProps {
   };
 }
 
+const STORY_PROGRESS_KEY = '@story_progress_';
+
 export default function StoryTab({ story }: StoryTabProps) {
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [bookmarked, setBookmarked] = useState(false);
+  const [bookmarkedChapters, setBookmarkedChapters] = useState<number[]>([]);
+  const [storyId, setStoryId] = useState('');
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' | 'info' });
 
   const currentChapter = story.chapters[currentChapterIndex];
   const isFirstChapter = currentChapterIndex === 0;
   const isLastChapter = currentChapterIndex === story.chapters.length - 1;
 
+  useEffect(() => {
+    const id = story.chapters[0]?.title.substring(0, 50) || 'default';
+    setStoryId(id);
+    loadStoryProgress(id);
+  }, []);
+
+  useEffect(() => {
+    if (storyId) {
+      saveStoryProgress();
+    }
+  }, [currentChapterIndex, bookmarkedChapters]);
+
+  useEffect(() => {
+    // Check if current chapter is bookmarked
+    setBookmarked(bookmarkedChapters.includes(currentChapterIndex));
+  }, [currentChapterIndex, bookmarkedChapters]);
+
+  const loadStoryProgress = async (id: string) => {
+    try {
+      const saved = await AsyncStorage.getItem(STORY_PROGRESS_KEY + id);
+      if (saved) {
+        const progress = JSON.parse(saved);
+        setCurrentChapterIndex(progress.currentChapterIndex || 0);
+        setBookmarkedChapters(progress.bookmarkedChapters || []);
+      }
+    } catch (error) {
+      console.error('Failed to load story progress:', error);
+    }
+  };
+
+  const saveStoryProgress = async () => {
+    try {
+      const progress = {
+        currentChapterIndex,
+        bookmarkedChapters,
+      };
+      await AsyncStorage.setItem(STORY_PROGRESS_KEY + storyId, JSON.stringify(progress));
+    } catch (error) {
+      console.error('Failed to save story progress:', error);
+    }
+  };
+
   const goToNextChapter = () => {
     if (!isLastChapter) {
       setCurrentChapterIndex(currentChapterIndex + 1);
-      setBookmarked(false);
     } else {
-      Alert.alert(
-        'Story Complete!',
-        'Congratulations! You\'ve finished reading the entire story.',
-        [
-          { text: 'Read Again', onPress: () => setCurrentChapterIndex(0) },
-          { text: 'OK', style: 'cancel' },
-        ]
-      );
+      setToast({ visible: true, message: 'Story Complete! 🎉', type: 'success' });
     }
   };
 
   const goToPreviousChapter = () => {
     if (!isFirstChapter) {
       setCurrentChapterIndex(currentChapterIndex - 1);
-      setBookmarked(false);
     }
   };
 
   const toggleBookmark = () => {
-    setBookmarked(!bookmarked);
-    if (!bookmarked) {
-      Alert.alert('Bookmarked', 'Chapter saved for later reading');
+    let newBookmarked = [...bookmarkedChapters];
+    if (bookmarked) {
+      newBookmarked = newBookmarked.filter(idx => idx !== currentChapterIndex);
+      setToast({ visible: true, message: 'Bookmark removed', type: 'info' });
+    } else {
+      newBookmarked.push(currentChapterIndex);
+      setToast({ visible: true, message: 'Chapter bookmarked', type: 'success' });
     }
+    setBookmarkedChapters(newBookmarked);
   };
 
   const renderParagraphs = (content: string) => {
@@ -71,6 +115,13 @@ export default function StoryTab({ story }: StoryTabProps) {
 
   return (
     <View style={styles.container}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={() => setToast({ ...toast, visible: false })}
+      />
+      
       {/* Chapter Info Bar */}
       <View style={styles.chapterInfoBar}>
         <View style={styles.chapterInfo}>

@@ -1,9 +1,10 @@
+import Toast from '@/components/Toast';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    Alert,
     ScrollView,
     Share,
     StyleSheet,
@@ -20,16 +21,48 @@ interface NotesTabProps {
   };
 }
 
+const NOTES_VIEW_KEY = '@notes_view_preference';
+
 export default function NotesTab({ notes }: NotesTabProps) {
   const [showDetailed, setShowDetailed] = useState(false);
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' as 'success' | 'error' | 'info' });
+
+  // Load saved preference
+  useEffect(() => {
+    loadViewPreference();
+  }, []);
+
+  // Save preference when changed
+  useEffect(() => {
+    saveViewPreference();
+  }, [showDetailed]);
+
+  const loadViewPreference = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(NOTES_VIEW_KEY);
+      if (saved !== null) {
+        setShowDetailed(saved === 'detailed');
+      }
+    } catch (error) {
+      console.error('Failed to load view preference:', error);
+    }
+  };
+
+  const saveViewPreference = async () => {
+    try {
+      await AsyncStorage.setItem(NOTES_VIEW_KEY, showDetailed ? 'detailed' : 'summary');
+    } catch (error) {
+      console.error('Failed to save view preference:', error);
+    }
+  };
 
   const copyToClipboard = async () => {
     try {
       const content = showDetailed ? notes.detailedNotes : formatSummaryText();
       await Clipboard.setStringAsync(content);
-      Alert.alert('Copied!', 'Notes copied to clipboard');
+      setToast({ visible: true, message: 'Notes copied to clipboard', type: 'success' });
     } catch (error) {
-      Alert.alert('Error', 'Failed to copy to clipboard');
+      setToast({ visible: true, message: 'Failed to copy', type: 'error' });
     }
   };
 
@@ -181,6 +214,13 @@ export default function NotesTab({ notes }: NotesTabProps) {
 
   return (
     <View style={styles.container}>
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={() => setToast({ ...toast, visible: false })}
+      />
+      
       {/* Action Buttons */}
       <View style={styles.actionBar}>
         <TouchableOpacity

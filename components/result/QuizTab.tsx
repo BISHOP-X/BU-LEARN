@@ -1,6 +1,7 @@
 import { Colors } from '@/constants/theme';
 import { QuizQuestion } from '@/lib/mockData';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -19,25 +20,72 @@ interface QuizTabProps {
   };
 }
 
+const QUIZ_PROGRESS_KEY = '@quiz_progress_';
+
 export default function QuizTab({ quiz }: QuizTabProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [showExplanation, setShowExplanation] = useState(false);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [score, setScore] = useState(0);
+  const [quizId, setQuizId] = useState('');
 
   const currentQuestion = quiz.questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === quiz.questions.length - 1;
   const hasAnswered = selectedAnswers[currentQuestionIndex] !== undefined;
 
   useEffect(() => {
-    // Reset quiz state when component mounts
-    setCurrentQuestionIndex(0);
-    setSelectedAnswers([]);
-    setShowExplanation(false);
-    setQuizCompleted(false);
-    setScore(0);
+    // Generate quiz ID from first question
+    const id = quiz.questions[0]?.question.substring(0, 50) || 'default';
+    setQuizId(id);
+    loadQuizProgress(id);
   }, []);
+
+  useEffect(() => {
+    if (quizId) {
+      saveQuizProgress();
+    }
+  }, [currentQuestionIndex, selectedAnswers, score, quizCompleted]);
+
+  const loadQuizProgress = async (id: string) => {
+    try {
+      const saved = await AsyncStorage.getItem(QUIZ_PROGRESS_KEY + id);
+      if (saved) {
+        const progress = JSON.parse(saved);
+        setCurrentQuestionIndex(progress.currentQuestionIndex || 0);
+        setSelectedAnswers(progress.selectedAnswers || []);
+        setScore(progress.score || 0);
+        setQuizCompleted(progress.quizCompleted || false);
+        if (progress.selectedAnswers[progress.currentQuestionIndex] !== undefined) {
+          setShowExplanation(true);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load quiz progress:', error);
+    }
+  };
+
+  const saveQuizProgress = async () => {
+    try {
+      const progress = {
+        currentQuestionIndex,
+        selectedAnswers,
+        score,
+        quizCompleted,
+      };
+      await AsyncStorage.setItem(QUIZ_PROGRESS_KEY + quizId, JSON.stringify(progress));
+    } catch (error) {
+      console.error('Failed to save quiz progress:', error);
+    }
+  };
+
+  const clearQuizProgress = async () => {
+    try {
+      await AsyncStorage.removeItem(QUIZ_PROGRESS_KEY + quizId);
+    } catch (error) {
+      console.error('Failed to clear quiz progress:', error);
+    }
+  };
 
   const handleSelectAnswer = (optionIndex: number) => {
     if (hasAnswered) return; // Can't change answer once selected
@@ -81,7 +129,8 @@ export default function QuizTab({ quiz }: QuizTabProps) {
     setQuizCompleted(true);
   };
 
-  const restartQuiz = () => {
+  const restartQuiz = async () => {
+    await clearQuizProgress();
     setCurrentQuestionIndex(0);
     setSelectedAnswers([]);
     setShowExplanation(false);

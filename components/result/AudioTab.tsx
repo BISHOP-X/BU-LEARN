@@ -1,5 +1,6 @@
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Slider from '@react-native-community/slider';
 import React, { useEffect, useState } from 'react';
 import {
@@ -18,13 +19,54 @@ interface AudioTabProps {
   };
 }
 
+const AUDIO_PROGRESS_KEY = '@audio_progress_';
+
 export default function AudioTab({ audio }: AudioTabProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [audioId, setAudioId] = useState('');
 
   const speedOptions = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  useEffect(() => {
+    const id = audio.url.substring(audio.url.lastIndexOf('/') + 1) || 'default';
+    setAudioId(id);
+    loadAudioProgress(id);
+  }, []);
+
+  useEffect(() => {
+    if (audioId && !isPlaying) {
+      // Save progress when paused or seeked
+      saveAudioProgress();
+    }
+  }, [currentTime, audioId]);
+
+  const loadAudioProgress = async (id: string) => {
+    try {
+      const saved = await AsyncStorage.getItem(AUDIO_PROGRESS_KEY + id);
+      if (saved) {
+        const progress = JSON.parse(saved);
+        setCurrentTime(progress.currentTime || 0);
+        setPlaybackSpeed(progress.playbackSpeed || 1.0);
+      }
+    } catch (error) {
+      console.error('Failed to load audio progress:', error);
+    }
+  };
+
+  const saveAudioProgress = async () => {
+    try {
+      const progress = {
+        currentTime,
+        playbackSpeed,
+      };
+      await AsyncStorage.setItem(AUDIO_PROGRESS_KEY + audioId, JSON.stringify(progress));
+    } catch (error) {
+      console.error('Failed to save audio progress:', error);
+    }
+  };
 
   // Simulate audio playback (mock)
   useEffect(() => {

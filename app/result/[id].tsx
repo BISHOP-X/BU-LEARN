@@ -2,19 +2,20 @@ import AudioTab from '@/components/result/AudioTab';
 import NotesTab from '@/components/result/NotesTab';
 import QuizTab from '@/components/result/QuizTab';
 import StoryTab from '@/components/result/StoryTab';
+import { ResultScreenSkeleton } from '@/components/SkeletonLoader';
 import { Colors } from '@/constants/theme';
 import { ConversionResult, getConversionById, mockConversionResult } from '@/lib/mockData';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     StyleSheet,
     Text,
     TouchableOpacity,
     View
 } from 'react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 type TabType = 'notes' | 'audio' | 'quiz' | 'story';
 
@@ -55,27 +56,60 @@ export default function ResultScreen() {
   const renderTabContent = () => {
     if (!result) return null;
 
+    const key = activeTab; // Force remount on tab change for animation
+
     switch (activeTab) {
       case 'notes':
-        return <NotesTab notes={result.notes} />;
+        return (
+          <Animated.View
+            key={key}
+            entering={FadeIn.duration(300)}
+            exiting={FadeOut.duration(200)}
+            style={{ flex: 1 }}
+          >
+            <NotesTab notes={result.notes} />
+          </Animated.View>
+        );
       case 'audio':
-        return <AudioTab audio={result.audio} />;
+        return (
+          <Animated.View
+            key={key}
+            entering={FadeIn.duration(300)}
+            exiting={FadeOut.duration(200)}
+            style={{ flex: 1 }}
+          >
+            <AudioTab audio={result.audio} />
+          </Animated.View>
+        );
       case 'quiz':
-        return <QuizTab quiz={result.quiz} />;
+        return (
+          <Animated.View
+            key={key}
+            entering={FadeIn.duration(300)}
+            exiting={FadeOut.duration(200)}
+            style={{ flex: 1 }}
+          >
+            <QuizTab quiz={result.quiz} />
+          </Animated.View>
+        );
       case 'story':
-        return <StoryTab story={result.story} />;
+        return (
+          <Animated.View
+            key={key}
+            entering={FadeIn.duration(300)}
+            exiting={FadeOut.duration(200)}
+            style={{ flex: 1 }}
+          >
+            <StoryTab story={result.story} />
+          </Animated.View>
+        );
       default:
         return null;
     }
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Loading conversion...</Text>
-      </View>
-    );
+    return <ResultScreenSkeleton />;
   }
 
   if (!result) {
